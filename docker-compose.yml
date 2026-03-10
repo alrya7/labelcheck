@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: labelcheck
+      POSTGRES_USER: labelcheck
+      POSTGRES_PASSWORD: labelcheck
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://labelcheck:labelcheck@db:5432/labelcheck
+    env_file:
+      - .env
+    depends_on:
+      - db
+    volumes:
+      - ./uploads:/app/uploads
+
+  bot:
+    build: ./bot
+    env_file:
+      - .env
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
