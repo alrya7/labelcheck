@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, JSON, LargeBinary, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -15,6 +15,8 @@ class VerificationReport(Base):
         String(36), ForeignKey("sgr_records.id"), nullable=True
     )
     label_file_path: Mapped[str | None] = mapped_column(Text)
+    label_file_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    label_file_mime: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Results
     overall_status: Mapped[str | None] = mapped_column(String(20))  # pass / fail / warning

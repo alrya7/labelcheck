@@ -38,19 +38,23 @@ async def check_label_endpoint(
     with open(saved_path, "wb") as f:
         f.write(file_bytes)
 
-    # If PDF, also save a PNG preview for the image viewer
+    # Generate PNG preview for storage in DB
     is_pdf = content_type == "application/pdf" or filename.lower().endswith(".pdf")
-    preview_path = saved_path  # default to original file
+    preview_bytes: bytes | None = None
+    preview_mime = content_type
     if is_pdf:
         try:
             png_pages = pdf_to_pngs(file_bytes)
             if png_pages:
-                preview_path = os.path.join(settings.upload_dir, f"label_{file_id}.png")
-                with open(preview_path, "wb") as f:
-                    f.write(png_pages[0])
-                logger.info("Saved PNG preview: %s", preview_path)
+                preview_bytes = png_pages[0]
+                preview_mime = "image/png"
+                logger.info("Generated PNG preview from PDF (%d bytes)", len(preview_bytes))
         except Exception as e:
             logger.warning("Failed to create PNG preview: %s", e)
+    else:
+        # For image uploads, store the original bytes
+        preview_bytes = file_bytes
+        preview_mime = content_type
 
     # Load SGR data if provided, or auto-detect later
     sgr_data = None
@@ -77,10 +81,12 @@ async def check_label_endpoint(
         if found:
             sgr_record_id = found.id
 
-    # Save report — use preview_path (PNG) for image display
+    # Save report with image data in DB (persists across deploys)
     report = VerificationReport(
         sgr_record_id=sgr_record_id,
-        label_file_path=preview_path,
+        label_file_path=saved_path,
+        label_file_data=preview_bytes,
+        label_file_mime=preview_mime,
         overall_status=result["overall_status"],
         score=result["score"],
         checks=result["checks"],
@@ -91,13 +97,8 @@ async def check_label_endpoint(
     await db.commit()
     await db.refresh(report)
 
-    # Build label file URL
-    upload_dir = os.path.abspath(settings.upload_dir)
-    abs_path = os.path.abspath(preview_path)
-    if abs_path.startswith(upload_dir):
-        label_url = f"/uploads/{os.path.relpath(abs_path, upload_dir)}"
-    else:
-        label_url = f"/uploads/{os.path.basename(saved_path)}"
+    # Image URL now points to the DB-backed endpoint
+    label_url = f"/api/v1/reports/{report.id}/image"
 
     return VerificationReportResponse(
         id=report.id,

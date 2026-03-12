@@ -2,8 +2,10 @@ import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi.responses import Response
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.config import settings
 from app.database import get_db
@@ -22,14 +24,15 @@ async def list_reports(
     """List all verification reports."""
     result = await db.execute(
         select(VerificationReport)
+        .options(defer(VerificationReport.label_file_data))
         .order_by(VerificationReport.created_at.desc())
         .offset(offset)
         .limit(limit)
     )
     reports = result.scalars().all()
 
-    count_result = await db.execute(select(VerificationReport))
-    total = len(count_result.scalars().all())
+    count_result = await db.execute(select(func.count(VerificationReport.id)))
+    total = count_result.scalar() or 0
 
     return ReportListResponse(
         items=[_to_response(r) for r in reports],
@@ -49,6 +52,23 @@ async def get_report(report_id: str, db: AsyncSession = Depends(get_db)):
     return _to_response(report)
 
 
+@router.get("/{report_id}/image")
+async def get_report_image(report_id: str, db: AsyncSession = Depends(get_db)):
+    """Serve the label image stored in the database."""
+    result = await db.execute(
+        select(VerificationReport).where(VerificationReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report or not report.label_file_data:
+        raise HTTPException(status_code=404, detail="Изображение не найдено")
+    mime = report.label_file_mime or "image/png"
+    return Response(
+        content=report.label_file_data,
+        media_type=mime,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @router.delete("/{report_id}")
 async def delete_report(report_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a verification report."""
@@ -63,21 +83,19 @@ async def delete_report(report_id: str, db: AsyncSession = Depends(get_db)):
     return {"detail": "Отчёт удалён"}
 
 
-def _label_file_url(report: VerificationReport) -> str | None:
-    """Build a URL to the label file relative to /uploads/."""
-    if not report.label_file_path:
-        return None
-    upload_dir = os.path.abspath(settings.upload_dir)
-    abs_path = os.path.abspath(report.label_file_path)
-    if abs_path.startswith(upload_dir):
-        rel = os.path.relpath(abs_path, upload_dir)
-        return f"/uploads/{rel}"
-    # Fallback: use just the filename
-    return f"/uploads/{os.path.basename(report.label_file_path)}"
-
-
 def _to_response(report: VerificationReport) -> VerificationReportResponse:
     checks = report.checks or []
+    # Use DB-backed image endpoint if image data is stored, otherwise fallback to file path
+    label_url = None
+    if report.label_file_mime:
+        label_url = f"/api/v1/reports/{report.id}/image"
+    elif report.label_file_path:
+        upload_dir = os.path.abspath(settings.upload_dir)
+        abs_path = os.path.abspath(report.label_file_path)
+        if abs_path.startswith(upload_dir):
+            label_url = f"/uploads/{os.path.relpath(abs_path, upload_dir)}"
+        else:
+            label_url = f"/uploads/{os.path.basename(report.label_file_path)}"
     return VerificationReportResponse(
         id=report.id,
         sgr_record_id=report.sgr_record_id,
@@ -85,6 +103,6 @@ def _to_response(report: VerificationReport) -> VerificationReportResponse:
         score=report.score or 0,
         checks=checks,
         extracted_label_text=report.extracted_label_text or "",
-        label_file_url=_label_file_url(report),
+        label_file_url=label_url,
         created_at=report.created_at,
     )
