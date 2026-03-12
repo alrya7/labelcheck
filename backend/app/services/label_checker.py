@@ -10,18 +10,19 @@ from app.services import eaeu_registry
 from app.services.rules import MANDATORY_CHECKS, compute_score
 
 
+logger = logging.getLogger(__name__)
+
+
 def _get_vision_service():
-    """Return the best available vision service (Gemini preferred, Moonshot fallback)."""
-    if settings.gemini_api_key:
-        from app.services import gemini
-        logger.info("Using Gemini for label analysis")
-        return gemini
+    """Return the best available vision service: OpenAI > Moonshot."""
+    if settings.openai_api_key:
+        from app.services import openai_vision
+        logger.info("Using OpenAI GPT-4o-mini for label analysis")
+        return openai_vision
     else:
         from app.services import moonshot
-        logger.info("Using Moonshot for label analysis (Gemini key not set)")
+        logger.info("Using Moonshot for label analysis (fallback)")
         return moonshot
-
-logger = logging.getLogger(__name__)
 
 # Regex patterns for SGR number extraction
 SGR_PATTERNS = [

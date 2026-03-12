@@ -1,28 +1,31 @@
-"""Google Gemini API client for label/document analysis."""
+"""OpenAI Vision API client for label/document analysis (GPT-4o-mini)."""
 import base64
 import json
 import logging
 import re
 
-from google import genai
+from openai import AsyncOpenAI
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=settings.gemini_api_key)
+client = AsyncOpenAI(
+    api_key=settings.openai_api_key,
+    timeout=300.0,
+    max_retries=2,
+)
 
-MODEL = settings.gemini_model
+MODEL = settings.openai_model
 
 
 def _parse_json_response(raw: str) -> dict:
     """Parse JSON from AI response, handling markdown code blocks."""
     text = raw.strip()
 
-    # Remove markdown code block wrapper
     if text.startswith("```"):
         lines = text.split("\n")
-        lines = lines[1:]  # remove opening ```json
+        lines = lines[1:]
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
         text = "\n".join(lines)
@@ -36,43 +39,58 @@ def _parse_json_response(raw: str) -> dict:
                 return json.loads(match.group())
             except json.JSONDecodeError:
                 pass
-        logger.warning("Failed to parse JSON from Gemini response, returning raw text")
+        logger.warning("Failed to parse JSON from OpenAI response, returning raw text")
         return {"raw_response": text, "checks": [], "extracted_text": text}
 
 
 async def analyze_image(image_bytes: bytes, prompt: str, mime_type: str = "image/png") -> str:
-    """Send an image to Gemini Vision API and get analysis."""
-    response = client.models.generate_content(
+    """Send an image to OpenAI Vision API."""
+    image_base64 = base64.b64encode(image_bytes).decode()
+
+    response = await client.chat.completions.create(
         model=MODEL,
-        contents=[
-            prompt,
-            genai.types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{image_base64}",
+                            "detail": "high",
+                        },
+                    },
+                ],
+            }
         ],
-        config=genai.types.GenerateContentConfig(
-            max_output_tokens=16384,
-            temperature=0.1,
-        ),
+        max_tokens=16384,
     )
-    return response.text
+
+    return response.choices[0].message.content
 
 
 async def analyze_multi_image(images: list[bytes], prompt: str) -> str:
-    """Send multiple images to Gemini Vision API."""
-    contents = [prompt]
-    for img_bytes in images:
-        contents.append(
-            genai.types.Part.from_bytes(data=img_bytes, mime_type="image/png")
-        )
+    """Send multiple images to OpenAI Vision API."""
+    content = [{"type": "text", "text": prompt}]
 
-    response = client.models.generate_content(
+    for img_bytes in images:
+        img_b64 = base64.b64encode(img_bytes).decode()
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/png;base64,{img_b64}",
+                "detail": "high",
+            },
+        })
+
+    response = await client.chat.completions.create(
         model=MODEL,
-        contents=contents,
-        config=genai.types.GenerateContentConfig(
-            max_output_tokens=16384,
-            temperature=0.1,
-        ),
+        messages=[{"role": "user", "content": content}],
+        max_tokens=16384,
     )
-    return response.text
+
+    return response.choices[0].message.content
 
 
 async def analyze_with_structured_output(
@@ -83,11 +101,10 @@ async def analyze_with_structured_output(
     mime_type: str = "image/png",
 ) -> dict:
     """Analyze a document and return structured JSON."""
-    if pdf_bytes:
-        # For PDF, send as inline data
-        raw = await analyze_image(pdf_bytes, prompt, "application/pdf")
-    elif image_bytes:
+    if image_bytes:
         raw = await analyze_image(image_bytes, prompt, mime_type)
+    elif pdf_bytes:
+        raise ValueError("PDF bytes not supported directly, convert to PNG first")
     else:
         raise ValueError("Either image_bytes or pdf_bytes must be provided")
 
