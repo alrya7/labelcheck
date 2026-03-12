@@ -11,10 +11,7 @@ if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 elif "asyncpg" in db_url and ".render.com" in db_url:
     # Render PostgreSQL external host requires SSL
-    _ssl_ctx = ssl_module.create_default_context()
-    _ssl_ctx.check_hostname = False
-    _ssl_ctx.verify_mode = ssl_module.CERT_NONE
-    connect_args = {"ssl": _ssl_ctx}
+    connect_args = {"ssl": True}
     # Remove query params that asyncpg doesn't understand
     if "?" in db_url:
         db_url = db_url.split("?")[0]
