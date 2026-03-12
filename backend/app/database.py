@@ -23,3 +23,17 @@ async def get_db():
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Add columns that create_all won't add to existing tables
+    async with engine.begin() as conn:
+        for col, coltype in [
+            ("label_file_data", "BYTEA"),
+            ("label_file_mime", "VARCHAR(50)"),
+        ]:
+            try:
+                await conn.execute(
+                    __import__("sqlalchemy").text(
+                        f"ALTER TABLE verification_reports ADD COLUMN IF NOT EXISTS {col} {coltype}"
+                    )
+                )
+            except Exception:
+                pass  # column already exists or DB doesn't support IF NOT EXISTS
