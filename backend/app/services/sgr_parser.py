@@ -119,8 +119,8 @@ async def parse_sgr_document(
             "serialnumb": reg.get("SERIALNUMB"),
         }
 
-        # Сравниваем AI-данные с реестром
-        ai_name = ai_extracted.get("NAME_PROD", "")
+        # Сравниваем AI-данные с реестром (пропускаем мусорные AI значения)
+        ai_name = _clean_ai_value(ai_extracted.get("NAME_PROD", ""))
         reg_name = reg.get("NAME_PROD", "")
         if ai_name and reg_name and ai_name.lower().strip() != reg_name.lower().strip():
             registry_discrepancies.append({
@@ -130,7 +130,7 @@ async def parse_sgr_document(
                 "severity": "info",  # расхождение может быть из-за OCR
             })
 
-        ai_firm = ai_extracted.get("FIRMGET_NAME", "")
+        ai_firm = _clean_ai_value(ai_extracted.get("FIRMGET_NAME", ""))
         reg_firm = reg.get("FIRMGET_NAME", "")
         if ai_firm and reg_firm:
             if (reg_firm.lower() not in ai_firm.lower()
@@ -177,6 +177,15 @@ async def parse_sgr_document(
         "registry_data": registry_data,
         "registry_discrepancies": registry_discrepancies,
     }
+
+
+def _clean_ai_value(val: str | None) -> str:
+    """Clean AI-extracted value: treat 'undefined', 'null', 'none', etc. as empty."""
+    if not val:
+        return ""
+    if val.strip().lower() in ("undefined", "null", "none", "n/a", "не указано"):
+        return ""
+    return val.strip()
 
 
 def _get_name(val) -> str | None:
