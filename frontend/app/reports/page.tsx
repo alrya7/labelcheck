@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listReports } from "@/lib/api";
+import { listReports, deleteReport } from "@/lib/api";
 
 interface ReportItem {
   id: string;
@@ -29,6 +29,18 @@ export default function ReportsListPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("Удалить этот отчёт?")) return;
+    try {
+      await deleteReport(id);
+      setItems((prev) => prev.filter((r) => r.id !== id));
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -84,8 +96,17 @@ export default function ReportsListPage() {
                         {st.text}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-400">
-                      {new Date(report.created_at).toLocaleString("ru-RU")}
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs text-gray-400">
+                        {new Date(report.created_at).toLocaleString("ru-RU")}
+                      </div>
+                      <button
+                        onClick={(e) => handleDelete(report.id, e)}
+                        className="text-gray-400 hover:text-red-600 text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                        title="Удалить отчёт"
+                      >
+                        ✕
+                      </button>
                     </div>
                   </div>
                 </Link>

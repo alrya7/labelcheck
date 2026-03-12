@@ -49,6 +49,20 @@ async def get_report(report_id: str, db: AsyncSession = Depends(get_db)):
     return _to_response(report)
 
 
+@router.delete("/{report_id}")
+async def delete_report(report_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a verification report."""
+    result = await db.execute(
+        select(VerificationReport).where(VerificationReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="Отчёт не найден")
+    await db.delete(report)
+    await db.commit()
+    return {"detail": "Отчёт удалён"}
+
+
 def _label_file_url(report: VerificationReport) -> str | None:
     """Build a URL to the label file relative to /uploads/."""
     if not report.label_file_path:

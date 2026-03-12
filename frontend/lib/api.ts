@@ -67,6 +67,12 @@ export async function getReport(id: string) {
   return res.json();
 }
 
+export async function deleteReport(id: string) {
+  const res = await fetch(`${API_BASE}/reports/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Ошибка удаления отчёта");
+  return res.json();
+}
+
 export async function searchRegistry(params: {
   numb_doc?: string;
   manufacturer?: string;
