@@ -24,14 +24,19 @@ SGR_PATTERNS = [
 MAX_PAGES = 10  # Limit pages to avoid huge payloads
 
 
-def pdf_to_pngs(pdf_bytes: bytes) -> list[bytes]:
-    """Convert pages of PDF to PNG images. Uses 2x for multi-page, 3x for single-page."""
+def pdf_to_pngs(pdf_bytes: bytes, high_res: bool = False) -> list[bytes]:
+    """Convert pages of PDF to PNG images. Uses higher resolution for label checking."""
     import fitz  # PyMuPDF
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page_count = len(doc)
-    # Higher resolution for single-page, lower for multi-page to reduce payload
-    scale = 3 if page_count == 1 else 2
+    # Use 4x for single-page labels (high_res), 3x normal single-page, 2x for multi-page
+    if high_res and page_count == 1:
+        scale = 4
+    elif page_count == 1:
+        scale = 3
+    else:
+        scale = 2
     images = []
     for i, page in enumerate(doc):
         if i >= MAX_PAGES:
@@ -76,9 +81,9 @@ async def check_label(
     else:
         prompt = CHECK_LABEL_PROMPT
 
-    # Convert PDF to PNG(s) for Vision API
+    # Convert PDF to PNG(s) for Vision API — use high_res for better text recognition
     if is_pdf:
-        png_pages = pdf_to_pngs(file_bytes)
+        png_pages = pdf_to_pngs(file_bytes, high_res=True)
         if len(png_pages) == 1:
             # Single page — send as one image
             ai_result = await moonshot.analyze_with_structured_output(

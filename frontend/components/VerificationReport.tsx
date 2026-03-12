@@ -24,6 +24,7 @@ interface ReportProps {
     datamatrix?: boolean;
     glass_fork?: boolean;
   };
+  hideNotApplicable?: boolean;
 }
 
 const STATUS_CONFIG: Record<string, { emoji: string; color: string; bg: string }> = {
@@ -47,6 +48,7 @@ export default function VerificationReport({
   checks,
   spellingErrors = [],
   therapeuticClaims = [],
+  hideNotApplicable = true,
 }: ReportProps) {
   const overall = STATUS_CONFIG[overallStatus] || STATUS_CONFIG.warning;
 
@@ -67,7 +69,9 @@ export default function VerificationReport({
 
       {/* Checks by category */}
       {Object.entries(CATEGORIES).map(([catId, catName]) => {
-        const catChecks = checks.filter((c) => c.category === catId);
+        const catChecks = checks.filter(
+          (c) => c.category === catId && !(hideNotApplicable && c.status === "not_applicable")
+        );
         if (catChecks.length === 0) return null;
 
         const passed = catChecks.filter((c) => c.status === "pass").length;

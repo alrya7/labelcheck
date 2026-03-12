@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import uuid
 
@@ -11,7 +12,9 @@ from app.database import get_db
 from app.models.sgr import SgrRecord
 from app.models.verification import VerificationReport
 from app.schemas.verification import VerificationReportResponse
-from app.services.label_checker import check_label
+from app.services.label_checker import check_label, pdf_to_pngs
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/label", tags=["Label Check"])
 
@@ -34,6 +37,20 @@ async def check_label_endpoint(
     saved_path = os.path.join(settings.upload_dir, f"label_{file_id}{ext}")
     with open(saved_path, "wb") as f:
         f.write(file_bytes)
+
+    # If PDF, also save a PNG preview for the image viewer
+    is_pdf = content_type == "application/pdf" or filename.lower().endswith(".pdf")
+    preview_path = saved_path  # default to original file
+    if is_pdf:
+        try:
+            png_pages = pdf_to_pngs(file_bytes)
+            if png_pages:
+                preview_path = os.path.join(settings.upload_dir, f"label_{file_id}.png")
+                with open(preview_path, "wb") as f:
+                    f.write(png_pages[0])
+                logger.info("Saved PNG preview: %s", preview_path)
+        except Exception as e:
+            logger.warning("Failed to create PNG preview: %s", e)
 
     # Load SGR data if provided, or auto-detect later
     sgr_data = None
@@ -60,10 +77,10 @@ async def check_label_endpoint(
         if found:
             sgr_record_id = found.id
 
-    # Save report
+    # Save report — use preview_path (PNG) for image display
     report = VerificationReport(
         sgr_record_id=sgr_record_id,
-        label_file_path=saved_path,
+        label_file_path=preview_path,
         overall_status=result["overall_status"],
         score=result["score"],
         checks=result["checks"],
@@ -73,6 +90,14 @@ async def check_label_endpoint(
     db.add(report)
     await db.commit()
     await db.refresh(report)
+
+    # Build label file URL
+    upload_dir = os.path.abspath(settings.upload_dir)
+    abs_path = os.path.abspath(preview_path)
+    if abs_path.startswith(upload_dir):
+        label_url = f"/uploads/{os.path.relpath(abs_path, upload_dir)}"
+    else:
+        label_url = f"/uploads/{os.path.basename(saved_path)}"
 
     return VerificationReportResponse(
         id=report.id,
@@ -84,5 +109,6 @@ async def check_label_endpoint(
         therapeutic_claims=result.get("therapeutic_claims", []),
         pictograms=result.get("pictograms"),
         extracted_label_text=report.extracted_label_text or "",
+        label_file_url=label_url,
         created_at=report.created_at,
     )

@@ -64,7 +64,7 @@ async def analyze_image(image_bytes: bytes, prompt: str, mime_type: str = "image
                 ],
             }
         ],
-        max_tokens=8192,
+        max_tokens=16384,
     )
 
     return response.choices[0].message.content
@@ -84,7 +84,7 @@ async def analyze_multi_image(images: list[bytes], prompt: str) -> str:
     response = await client.chat.completions.create(
         model="kimi-latest",
         messages=[{"role": "user", "content": content}],
-        max_tokens=8192,
+        max_tokens=16384,
     )
 
     return response.choices[0].message.content

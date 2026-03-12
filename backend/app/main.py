@@ -1,10 +1,13 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api import label, registry, reports, sgr
+from app.config import settings
 from app.database import create_tables
 
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +42,10 @@ app.include_router(sgr.router, prefix="/api/v1")
 app.include_router(label.router, prefix="/api/v1")
 app.include_router(registry.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+
+# Serve uploaded files (labels, SGR documents) as static files
+os.makedirs(settings.upload_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
 
 @app.get("/")

@@ -45,6 +45,7 @@ class VerificationReportResponse(BaseModel):
     therapeutic_claims: list[TherapeuticClaim] = []
     pictograms: Pictograms | None = None
     extracted_label_text: str = ""
+    label_file_url: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
