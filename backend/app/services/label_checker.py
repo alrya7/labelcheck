@@ -21,18 +21,27 @@ SGR_PATTERNS = [
 ]
 
 
+MAX_PAGES = 10  # Limit pages to avoid huge payloads
+
+
 def pdf_to_pngs(pdf_bytes: bytes) -> list[bytes]:
-    """Convert ALL pages of PDF to PNG images at high resolution."""
+    """Convert pages of PDF to PNG images. Uses 2x for multi-page, 3x for single-page."""
     import fitz  # PyMuPDF
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    page_count = len(doc)
+    # Higher resolution for single-page, lower for multi-page to reduce payload
+    scale = 3 if page_count == 1 else 2
     images = []
-    for page in doc:
-        # Render at 3x resolution for better OCR quality
-        mat = fitz.Matrix(3, 3)
+    for i, page in enumerate(doc):
+        if i >= MAX_PAGES:
+            logger.warning("PDF has %d pages, truncating to %d", page_count, MAX_PAGES)
+            break
+        mat = fitz.Matrix(scale, scale)
         pix = page.get_pixmap(matrix=mat)
         png_bytes = pix.tobytes("png")
         images.append(png_bytes)
+        logger.info("Page %d/%d converted (%d KB)", i + 1, min(page_count, MAX_PAGES), len(png_bytes) // 1024)
     doc.close()
     return images
 

@@ -23,7 +23,13 @@ export default function Home() {
       const result = await checkLabel(file);
       setReport(result);
     } catch (e: any) {
-      setError(e.message);
+      if (e.name === "AbortError") {
+        setError("Превышено время ожидания (5 мин). Попробуйте загрузить изображение вместо PDF или PDF с меньшим числом страниц.");
+      } else if (e.message === "Failed to fetch") {
+        setError("Не удалось подключиться к серверу. Убедитесь что бэкенд запущен на localhost:8000");
+      } else {
+        setError(e.message);
+      }
     } finally {
       setLoading(false);
     }

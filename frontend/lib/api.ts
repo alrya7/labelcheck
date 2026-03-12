@@ -1,10 +1,16 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
+function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 300000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 export async function uploadSgr(file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE}/sgr/upload`, {
+  const res = await fetchWithTimeout(`${API_BASE}/sgr/upload`, {
     method: "POST",
     body: formData,
   });
@@ -36,7 +42,7 @@ export async function checkLabel(file: File, sgrRecordId?: string) {
     formData.append("sgr_record_id", sgrRecordId);
   }
 
-  const res = await fetch(`${API_BASE}/label/check`, {
+  const res = await fetchWithTimeout(`${API_BASE}/label/check`, {
     method: "POST",
     body: formData,
   });
