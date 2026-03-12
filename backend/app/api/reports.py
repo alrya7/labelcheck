@@ -36,7 +36,7 @@ async def list_reports(
 
 
 @router.get("/{report_id}", response_model=VerificationReportResponse)
-async def get_report(report_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_report(report_id: str, db: AsyncSession = Depends(get_db)):
     """Get a specific verification report."""
     result = await db.execute(
         select(VerificationReport).where(VerificationReport.id == report_id)
