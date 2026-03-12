@@ -12,7 +12,11 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await create_tables()
+    try:
+        await create_tables()
+        logging.info("Database tables created successfully")
+    except Exception as e:
+        logging.error(f"Failed to create tables: {e}")
     yield
 
 
