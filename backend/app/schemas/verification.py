@@ -35,8 +35,13 @@ class Pictograms(BaseModel):
     other: list[str] = []
 
 
+class ReportNameUpdate(BaseModel):
+    name: str
+
+
 class VerificationReportResponse(BaseModel):
     id: str
+    name: str | None = None
     sgr_record_id: str | None = None
     overall_status: str
     score: int

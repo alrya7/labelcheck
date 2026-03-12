@@ -73,6 +73,16 @@ export async function deleteReport(id: string) {
   return res.json();
 }
 
+export async function updateReportName(id: string, name: string) {
+  const res = await fetch(`${API_BASE}/reports/${id}/name`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error("Ошибка обновления названия");
+  return res.json();
+}
+
 export async function searchRegistry(params: {
   numb_doc?: string;
   manufacturer?: string;

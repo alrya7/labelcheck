@@ -28,6 +28,7 @@ async def create_tables():
         for col, coltype in [
             ("label_file_data", "BYTEA"),
             ("label_file_mime", "VARCHAR(50)"),
+            ("name", "VARCHAR(255)"),
         ]:
             try:
                 await conn.execute(

@@ -81,8 +81,12 @@ async def check_label_endpoint(
         if found:
             sgr_record_id = found.id
 
+    # Auto-name from product name detected by AI
+    product_name = result.get("product_name") or filename
+
     # Save report with image data in DB (persists across deploys)
     report = VerificationReport(
+        name=product_name,
         sgr_record_id=sgr_record_id,
         label_file_path=saved_path,
         label_file_data=preview_bytes,
@@ -102,6 +106,7 @@ async def check_label_endpoint(
 
     return VerificationReportResponse(
         id=report.id,
+        name=report.name,
         sgr_record_id=report.sgr_record_id,
         overall_status=report.overall_status,
         score=report.score,

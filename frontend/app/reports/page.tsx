@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listReports, deleteReport } from "@/lib/api";
+import { listReports, deleteReport, updateReportName } from "@/lib/api";
 
 interface ReportItem {
   id: string;
+  name?: string;
   overall_status: string;
   score: number;
   created_at: string;
@@ -22,6 +23,8 @@ export default function ReportsListPage() {
   const [items, setItems] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   useEffect(() => {
     listReports()
@@ -40,6 +43,34 @@ export default function ReportsListPage() {
     } catch (err: any) {
       alert(err.message);
     }
+  };
+
+  const startEditing = (report: ReportItem, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingId(report.id);
+    setEditName(report.name || "");
+  };
+
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!editingId) return;
+    try {
+      await updateReportName(editingId, editName);
+      setItems((prev) =>
+        prev.map((r) => (r.id === editingId ? { ...r, name: editName } : r))
+      );
+      setEditingId(null);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const cancelEdit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingId(null);
   };
 
   return (
@@ -83,20 +114,65 @@ export default function ReportsListPage() {
           <div className="space-y-3">
             {items.map((report) => {
               const st = STATUS_LABEL[report.overall_status] || STATUS_LABEL.warning;
+              const isEditing = editingId === report.id;
               return (
                 <Link
                   key={report.id}
                   href={`/reports/${report.id}`}
                   className="block bg-white border rounded-lg p-4 hover:border-blue-300 transition-colors"
                 >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                      <div className="text-2xl font-bold">{report.score}/100</div>
-                      <span className={`text-xs px-2 py-1 rounded-full ${st.color}`}>
-                        {st.text}
-                      </span>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0">
+                      {isEditing ? (
+                        <form
+                          onSubmit={saveEdit}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-2 mb-2"
+                        >
+                          <input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="border rounded px-2 py-1 text-sm flex-1"
+                            autoFocus
+                            onClick={(e) => e.preventDefault()}
+                          />
+                          <button
+                            type="submit"
+                            className="text-sm px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                          >
+                            OK
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className="text-sm px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
+                          >
+                            Отмена
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-medium text-sm truncate">
+                            {report.name || "Без названия"}
+                          </span>
+                          <button
+                            onClick={(e) => startEditing(report, e)}
+                            className="text-gray-400 hover:text-blue-600 text-xs flex-shrink-0"
+                            title="Редактировать название"
+                          >
+                            ✎
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-4">
+                        <div className="text-2xl font-bold">{report.score}/100</div>
+                        <span className={`text-xs px-2 py-1 rounded-full ${st.color}`}>
+                          {st.text}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-4">
                       <div className="text-xs text-gray-400">
                         {new Date(report.created_at).toLocaleString("ru-RU")}
                       </div>

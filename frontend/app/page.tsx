@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import FileUpload from "@/components/FileUpload";
 import VerificationReport from "@/components/VerificationReport";
+import LabelImageViewer from "@/components/LabelImageViewer";
 import { checkLabel, uploadSgr } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -55,7 +56,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b">
-        <div className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">LabelCheck</h1>
             <p className="text-gray-500 text-sm mt-1">
@@ -73,7 +74,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
           <button
@@ -115,42 +116,54 @@ export default function Home() {
             )}
 
             {report && (
-              <>
-                {report.id && (
-                  <div className="flex justify-end">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-semibold">
+                    {report.name || "Результат проверки"}
+                  </h2>
+                  {report.id && (
                     <Link
                       href={`/reports/${report.id}`}
                       className="text-sm text-blue-600 hover:underline"
                     >
                       Открыть полный отчёт &rarr;
                     </Link>
-                  </div>
-                )}
+                  )}
+                </div>
 
-                {report.label_file_url && (
-                  <div className="bg-white border rounded-lg overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-3">
-                      <h3 className="font-semibold text-sm">Макет этикетки</h3>
-                    </div>
-                    <div className="p-4 flex justify-center bg-gray-100">
-                      <img
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Left: label image */}
+                  <div className="space-y-6">
+                    {report.label_file_url && (
+                      <LabelImageViewer
                         src={`${BACKEND_ORIGIN}${report.label_file_url}`}
-                        alt="Этикетка"
-                        className="max-w-full max-h-96 object-contain"
                       />
-                    </div>
-                  </div>
-                )}
+                    )}
 
-                <VerificationReport
-                  score={report.score}
-                  overallStatus={report.overall_status}
-                  checks={report.checks}
-                  spellingErrors={report.spelling_errors}
-                  therapeuticClaims={report.therapeutic_claims}
-                  pictograms={report.pictograms}
-                />
-              </>
+                    {report.extracted_label_text && (
+                      <div className="bg-white border rounded-lg p-6">
+                        <h3 className="font-semibold mb-3">Извлечённый текст этикетки</h3>
+                        <pre className="text-sm bg-gray-50 rounded p-4 whitespace-pre-wrap max-h-96 overflow-y-auto">
+                          {report.extracted_label_text}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right: checks */}
+                  <div>
+                    <VerificationReport
+                      score={report.score}
+                      overallStatus={report.overall_status}
+                      checks={report.checks}
+                      spellingErrors={report.spelling_errors}
+                      therapeuticClaims={report.therapeutic_claims}
+                      pictograms={report.pictograms}
+                      hideNotApplicable={true}
+                    />
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -226,7 +239,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t bg-white mt-12">
-        <div className="max-w-4xl mx-auto px-4 py-4 text-center text-xs text-gray-400">
+        <div className="max-w-6xl mx-auto px-4 py-4 text-center text-xs text-gray-400">
           LabelCheck v0.1 | ТР ТС 022/2011 | ТР ТС 021/2011 | СанПиН 2.3.2.1290-03 | API реестра nsi.eaeunion.org
         </div>
       </footer>

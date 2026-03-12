@@ -10,7 +10,7 @@ from sqlalchemy.orm import defer
 from app.config import settings
 from app.database import get_db
 from app.models.verification import VerificationReport
-from app.schemas.verification import ReportListResponse, VerificationReportResponse
+from app.schemas.verification import ReportListResponse, ReportNameUpdate, VerificationReportResponse
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -69,6 +69,20 @@ async def get_report_image(report_id: str, db: AsyncSession = Depends(get_db)):
     )
 
 
+@router.patch("/{report_id}/name")
+async def update_report_name(report_id: str, body: ReportNameUpdate, db: AsyncSession = Depends(get_db)):
+    """Update the report name."""
+    result = await db.execute(
+        select(VerificationReport).where(VerificationReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="Отчёт не найден")
+    report.name = body.name
+    await db.commit()
+    return {"detail": "Название обновлено"}
+
+
 @router.delete("/{report_id}")
 async def delete_report(report_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a verification report."""
@@ -98,6 +112,7 @@ def _to_response(report: VerificationReport) -> VerificationReportResponse:
             label_url = f"/uploads/{os.path.basename(report.label_file_path)}"
     return VerificationReportResponse(
         id=report.id,
+        name=report.name,
         sgr_record_id=report.sgr_record_id,
         overall_status=report.overall_status or "unknown",
         score=report.score or 0,

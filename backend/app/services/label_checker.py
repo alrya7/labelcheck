@@ -1,28 +1,13 @@
 """Label verification engine: AI analysis + rule-based checks + registry cross-reference."""
-import io
 import json
 import logging
 import re
 
-from app.config import settings
 from app.prompts.check_label import CHECK_LABEL_PROMPT, CHECK_LABEL_WITH_SGR_PROMPT
-from app.services import eaeu_registry
+from app.services import eaeu_registry, openai_vision
 from app.services.rules import MANDATORY_CHECKS, compute_score
 
-
 logger = logging.getLogger(__name__)
-
-
-def _get_vision_service():
-    """Return the best available vision service: OpenAI > Moonshot."""
-    if settings.openai_api_key:
-        from app.services import openai_vision
-        logger.info("Using OpenAI GPT-4o-mini for label analysis")
-        return openai_vision
-    else:
-        from app.services import moonshot
-        logger.info("Using Moonshot for label analysis (fallback)")
-        return moonshot
 
 # Regex patterns for SGR number extraction
 SGR_PATTERNS = [
@@ -95,13 +80,11 @@ async def check_label(
     else:
         prompt = CHECK_LABEL_PROMPT
 
-    vision = _get_vision_service()
-
     # Convert PDF to PNG(s) for Vision API — use high_res for better text recognition
     if is_pdf:
         png_pages = pdf_to_pngs(file_bytes, high_res=True)
         if len(png_pages) == 1:
-            ai_result = await vision.analyze_with_structured_output(
+            ai_result = await openai_vision.analyze_with_structured_output(
                 image_bytes=png_pages[0],
                 pdf_bytes=None,
                 filename=filename,
@@ -109,12 +92,12 @@ async def check_label(
                 mime_type="image/png",
             )
         else:
-            ai_result = await vision.analyze_with_structured_output_multi(
+            ai_result = await openai_vision.analyze_with_structured_output_multi(
                 images=png_pages,
                 prompt=prompt,
             )
     else:
-        ai_result = await vision.analyze_with_structured_output(
+        ai_result = await openai_vision.analyze_with_structured_output(
             image_bytes=file_bytes,
             pdf_bytes=None,
             filename=filename,
@@ -162,6 +145,7 @@ async def check_label(
         "extracted_label_text": extracted_text,
         "sgr_number": sgr_number,
         "registry_data": registry_data,
+        "product_name": ai_result.get("product_name"),
         "spelling_errors": ai_result.get("spelling_errors", []),
         "therapeutic_claims": ai_result.get("therapeutic_claims", []),
         "pictograms": ai_result.get("pictograms", {}),

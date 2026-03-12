@@ -11,6 +11,7 @@ class VerificationReport(Base):
     __tablename__ = "verification_reports"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sgr_record_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("sgr_records.id"), nullable=True
     )
