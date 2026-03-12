@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import FileUpload from "@/components/FileUpload";
 import VerificationReport from "@/components/VerificationReport";
 import { checkLabel, uploadSgr } from "@/lib/api";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1\/?$/, "");
 
 type Tab = "check" | "sgr";
 
@@ -112,14 +115,42 @@ export default function Home() {
             )}
 
             {report && (
-              <VerificationReport
-                score={report.score}
-                overallStatus={report.overall_status}
-                checks={report.checks}
-                spellingErrors={report.spelling_errors}
-                therapeuticClaims={report.therapeutic_claims}
-                pictograms={report.pictograms}
-              />
+              <>
+                {report.id && (
+                  <div className="flex justify-end">
+                    <Link
+                      href={`/reports/${report.id}`}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      Открыть полный отчёт &rarr;
+                    </Link>
+                  </div>
+                )}
+
+                {report.label_file_url && (
+                  <div className="bg-white border rounded-lg overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-3">
+                      <h3 className="font-semibold text-sm">Макет этикетки</h3>
+                    </div>
+                    <div className="p-4 flex justify-center bg-gray-100">
+                      <img
+                        src={`${BACKEND_ORIGIN}${report.label_file_url}`}
+                        alt="Этикетка"
+                        className="max-w-full max-h-96 object-contain"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <VerificationReport
+                  score={report.score}
+                  overallStatus={report.overall_status}
+                  checks={report.checks}
+                  spellingErrors={report.spelling_errors}
+                  therapeuticClaims={report.therapeutic_claims}
+                  pictograms={report.pictograms}
+                />
+              </>
             )}
           </div>
         )}

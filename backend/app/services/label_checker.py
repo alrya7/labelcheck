@@ -4,9 +4,22 @@ import json
 import logging
 import re
 
+from app.config import settings
 from app.prompts.check_label import CHECK_LABEL_PROMPT, CHECK_LABEL_WITH_SGR_PROMPT
-from app.services import eaeu_registry, moonshot
+from app.services import eaeu_registry
 from app.services.rules import MANDATORY_CHECKS, compute_score
+
+
+def _get_vision_service():
+    """Return the best available vision service (Gemini preferred, Moonshot fallback)."""
+    if settings.gemini_api_key:
+        from app.services import gemini
+        logger.info("Using Gemini for label analysis")
+        return gemini
+    else:
+        from app.services import moonshot
+        logger.info("Using Moonshot for label analysis (Gemini key not set)")
+        return moonshot
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +94,13 @@ async def check_label(
     else:
         prompt = CHECK_LABEL_PROMPT
 
+    vision = _get_vision_service()
+
     # Convert PDF to PNG(s) for Vision API — use high_res for better text recognition
     if is_pdf:
         png_pages = pdf_to_pngs(file_bytes, high_res=True)
         if len(png_pages) == 1:
-            # Single page — send as one image
-            ai_result = await moonshot.analyze_with_structured_output(
+            ai_result = await vision.analyze_with_structured_output(
                 image_bytes=png_pages[0],
                 pdf_bytes=None,
                 filename=filename,
@@ -94,13 +108,12 @@ async def check_label(
                 mime_type="image/png",
             )
         else:
-            # Multi-page — send all pages as separate images
-            ai_result = await moonshot.analyze_with_structured_output_multi(
+            ai_result = await vision.analyze_with_structured_output_multi(
                 images=png_pages,
                 prompt=prompt,
             )
     else:
-        ai_result = await moonshot.analyze_with_structured_output(
+        ai_result = await vision.analyze_with_structured_output(
             image_bytes=file_bytes,
             pdf_bytes=None,
             filename=filename,
