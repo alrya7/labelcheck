@@ -8,13 +8,9 @@ db_url = settings.database_url
 
 if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
-else:
-    # Switch from asyncpg to psycopg driver (handles SSL natively via sslmode param)
+elif "asyncpg" in db_url:
+    # Swap asyncpg -> psycopg driver (better SSL/sslmode support)
     db_url = db_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
-    # Ensure sslmode=require for Render PostgreSQL
-    if ".render.com" in db_url:
-        sep = "&" if "?" in db_url else "?"
-        db_url += f"{sep}sslmode=prefer"
 
 engine = create_async_engine(db_url, echo=False, connect_args=connect_args)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -46,4 +42,4 @@ async def create_tables():
                     )
                 )
             except Exception:
-                pass  # column already exists or DB doesn't support IF NOT EXISTS
+                pass
