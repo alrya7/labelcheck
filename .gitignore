@@ -13,7 +13,7 @@ build/
 # Environment
 .env
 .env.local
-.env.production
+# Note: frontend/.env.production is committed (contains only public URL, no secrets)
 
 # Database
 *.db

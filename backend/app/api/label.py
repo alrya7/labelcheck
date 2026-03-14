@@ -12,11 +12,36 @@ from app.database import get_db
 from app.models.sgr import SgrRecord
 from app.models.verification import VerificationReport
 from app.schemas.verification import VerificationReportResponse
-from app.services.label_checker import check_label, pdf_to_pngs
+from app.services.label_checker import check_label, pdf_to_pngs, _merge_checks
+from app.services.rules import compute_score
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/label", tags=["Label Check"])
+
+# Cyrillic → Latin map for SGR number normalization
+_CYR_TO_LAT = {"А": "A", "В": "B", "С": "C", "Е": "E", "К": "K", "М": "M", "О": "O", "Р": "R", "Т": "T"}
+
+
+def _normalize_sgr(num: str) -> str:
+    """Normalize SGR number: replace Cyrillic look-alikes with Latin."""
+    return "".join(_CYR_TO_LAT.get(ch, ch) for ch in num)
+
+
+def _sgr_to_dict(record: SgrRecord) -> dict:
+    """Convert SgrRecord to dict matching EAEU registry format for _check_registry."""
+    return {
+        "data": {
+            "NUMB_DOC": record.numb_doc,
+            "DATE_DOC": str(record.date_doc) if record.date_doc else None,
+            "STATUS": {"name": record.status or ""},
+            "NAME_PROD": record.name_prod,
+            "FIRMGET_NAME": record.firmget_name,
+            "FIRMGET_ADDR": record.firmget_addr,
+            "FIRMMADE_NAME": record.firmmade_name,
+            "DOC_NORM": record.doc_norm,
+        }
+    }
 
 
 @router.post("/check", response_model=VerificationReportResponse)
@@ -68,18 +93,47 @@ async def check_label_endpoint(
             if sgr_record.eaeu_registry_data:
                 sgr_data["_registry"] = sgr_record.eaeu_registry_data
 
-    # Run label check
+    # Run label check (first pass — without SGR cross-reference)
     result = await check_label(file_bytes, filename, content_type, sgr_data)
 
-    # If no SGR was provided, try to find one by the SGR number on the label
+    # Try to find SGR in local DB by number extracted from label
+    sgr_record_data = None
     if not sgr_record_id and result.get("sgr_number"):
         sgr_num = result["sgr_number"]
-        db_result = await db.execute(
-            select(SgrRecord).where(SgrRecord.numb_doc == sgr_num)
-        )
-        found = db_result.scalar_one_or_none()
-        if found:
-            sgr_record_id = found.id
+        # Try exact match, then normalized (cyrillic -> latin)
+        for num in [sgr_num, _normalize_sgr(sgr_num)]:
+            db_result = await db.execute(
+                select(SgrRecord).where(SgrRecord.numb_doc == num)
+            )
+            found = db_result.scalar_one_or_none()
+            if found:
+                sgr_record_id = found.id
+                sgr_record_data = _sgr_to_dict(found)
+                break
+        # Fallback: fuzzy search by product name
+        if not sgr_record_data and result.get("product_name"):
+            db_result = await db.execute(
+                select(SgrRecord).where(
+                    SgrRecord.name_prod.ilike(f"%{result['product_name']}%")
+                )
+            )
+            found = db_result.scalar_one_or_none()
+            if found:
+                sgr_record_id = found.id
+                sgr_record_data = _sgr_to_dict(found)
+    elif sgr_record and not sgr_record_data:
+        sgr_record_data = _sgr_to_dict(sgr_record)
+
+    # Re-merge checks with SGR data (no second AI call needed)
+    if sgr_record_data:
+        ai_result = json.loads(result.get("ai_analysis", "{}") or "{}")
+        ai_checks = ai_result.get("checks", [])
+        checks = _merge_checks(ai_checks, sgr_record_data, ai_result)
+        score, overall_status = compute_score(checks)
+        result["checks"] = checks
+        result["score"] = score
+        result["overall_status"] = overall_status
+        logger.info("Re-merged checks with SGR data from local DB")
 
     # Auto-name from product name detected by AI
     product_name = result.get("product_name") or filename

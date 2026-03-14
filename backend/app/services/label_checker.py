@@ -4,7 +4,7 @@ import logging
 import re
 
 from app.prompts.check_label import CHECK_LABEL_PROMPT, CHECK_LABEL_WITH_SGR_PROMPT
-from app.services import eaeu_registry, openai_vision
+from app.services import openai_vision
 from app.services.rules import MANDATORY_CHECKS, compute_score
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,8 @@ SGR_PATTERNS = [
     r'[A-ZА-Я]{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\.[RР]\.\d{6}\.\d{2}\.\d{2}',
     # Just the number pattern without country prefix
     r'\d{2}\.\d{2}\.\d{2}\.\d{3}\.[RР]\.\d{6}\.\d{2}\.\d{2}',
+    # Shorter format: AA.003.003.000046.03.25 (without R letter)
+    r'[A-ZА-Я]{2}[\.\s]*\d{3}[\.\s]*\d{3}[\.\s]*\d{6}[\.\s]*\d{2}[\.\s]*\d{2}',
 ]
 
 
@@ -115,24 +117,9 @@ async def check_label(
         if sgr_number:
             logger.info("SGR number extracted via regex: %s", sgr_number)
 
-    # Step 3: Cross-reference SGR number with EAEU registry
-    registry_data = None
-    if sgr_number:
-        try:
-            registry_data = await eaeu_registry.get_full_record(sgr_number)
-            if registry_data:
-                logger.info("Registry data found for SGR %s", sgr_number)
-            else:
-                # Try with normalized number (replace common OCR errors)
-                normalized = sgr_number.replace("Р", "R").replace("М", "M")
-                if normalized != sgr_number:
-                    registry_data = await eaeu_registry.get_full_record(normalized)
-        except Exception as e:
-            logger.warning("Registry lookup failed for %s: %s", sgr_number, e)
-
-    # Step 4: Enhance AI checks with registry data
+    # Step 3: Merge AI checks (SGR cross-reference done by caller if SGR found in DB)
     ai_checks = ai_result.get("checks", [])
-    checks = _merge_checks(ai_checks, registry_data, ai_result)
+    checks = _merge_checks(ai_checks, None, ai_result)
 
     # Step 5: Compute score
     score, overall_status = compute_score(checks)
