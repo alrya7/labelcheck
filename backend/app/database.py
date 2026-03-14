@@ -1,5 +1,3 @@
-import ssl as ssl_module
-
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -7,17 +5,16 @@ from app.config import settings
 
 connect_args = {}
 db_url = settings.database_url
+
 if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
-elif "asyncpg" in db_url:
-    # Render PostgreSQL requires SSL for external connections
-    _ctx = ssl_module.SSLContext(ssl_module.PROTOCOL_TLS_CLIENT)
-    _ctx.check_hostname = False
-    _ctx.verify_mode = ssl_module.CERT_NONE
-    connect_args = {"ssl": _ctx}
-    # Remove query params that asyncpg doesn't understand
-    if "?" in db_url:
-        db_url = db_url.split("?")[0]
+else:
+    # Switch from asyncpg to psycopg driver (handles SSL natively via sslmode param)
+    db_url = db_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
+    # Ensure sslmode=require for Render PostgreSQL
+    if ".render.com" in db_url:
+        sep = "&" if "?" in db_url else "?"
+        db_url += f"{sep}sslmode=require"
 
 engine = create_async_engine(db_url, echo=False, connect_args=connect_args)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
