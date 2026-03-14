@@ -14,7 +14,7 @@ else:
     # Ensure sslmode=require for Render PostgreSQL
     if ".render.com" in db_url:
         sep = "&" if "?" in db_url else "?"
-        db_url += f"{sep}sslmode=require"
+        db_url += f"{sep}sslmode=prefer"
 
 engine = create_async_engine(db_url, echo=False, connect_args=connect_args)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
