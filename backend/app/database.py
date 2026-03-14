@@ -9,9 +9,12 @@ connect_args = {}
 db_url = settings.database_url
 if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
-elif "asyncpg" in db_url and ".render.com" in db_url:
-    # Render PostgreSQL external host requires SSL
-    connect_args = {"ssl": True}
+elif "asyncpg" in db_url:
+    # Render PostgreSQL requires SSL for external connections
+    _ctx = ssl_module.SSLContext(ssl_module.PROTOCOL_TLS_CLIENT)
+    _ctx.check_hostname = False
+    _ctx.verify_mode = ssl_module.CERT_NONE
+    connect_args = {"ssl": _ctx}
     # Remove query params that asyncpg doesn't understand
     if "?" in db_url:
         db_url = db_url.split("?")[0]
