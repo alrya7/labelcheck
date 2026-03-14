@@ -11,7 +11,8 @@ import logging
 import re
 
 from app.prompts.parse_sgr import PARSE_SGR_PROMPT
-from app.services import eaeu_registry, moonshot
+from app.services import eaeu_registry, openai_vision
+from app.services.label_checker import pdf_to_pngs
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +54,29 @@ async def parse_sgr_document(
     is_pdf = content_type == "application/pdf" or filename.lower().endswith(".pdf")
 
     # Step 1: AI извлекает данные из скана (ключи UPPER_CASE как в API реестра)
-    ai_extracted = await moonshot.analyze_with_structured_output(
-        image_bytes=None if is_pdf else file_bytes,
-        pdf_bytes=file_bytes if is_pdf else None,
-        filename=filename,
-        prompt=PARSE_SGR_PROMPT,
-        mime_type=content_type,
-    )
+    if is_pdf:
+        png_pages = pdf_to_pngs(file_bytes)
+        if len(png_pages) == 1:
+            ai_extracted = await openai_vision.analyze_with_structured_output(
+                image_bytes=png_pages[0],
+                pdf_bytes=None,
+                filename=filename,
+                prompt=PARSE_SGR_PROMPT,
+                mime_type="image/png",
+            )
+        else:
+            ai_extracted = await openai_vision.analyze_with_structured_output_multi(
+                images=png_pages,
+                prompt=PARSE_SGR_PROMPT,
+            )
+    else:
+        ai_extracted = await openai_vision.analyze_with_structured_output(
+            image_bytes=file_bytes,
+            pdf_bytes=None,
+            filename=filename,
+            prompt=PARSE_SGR_PROMPT,
+            mime_type=content_type,
+        )
 
     # Step 2: Нормализация номера СГР
     raw_numb = ai_extracted.get("NUMB_DOC", "") or ai_extracted.get("numb_doc", "")

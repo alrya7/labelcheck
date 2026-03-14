@@ -5,11 +5,6 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://labelcheck:labelcheck@localhost:5432/labelcheck"
 
-    # Kimi Moonshot (legacy fallback)
-    moonshot_api_key: str = ""
-    moonshot_base_url: str = "https://api.moonshot.cn/v1"
-    moonshot_model: str = "kimi-k2.5"
-
     # OpenAI (GPT-4o-mini — primary for label analysis)
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
