@@ -1,5 +1,3 @@
-import ssl
-
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -11,16 +9,12 @@ db_url = settings.database_url
 if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 elif "asyncpg" in db_url:
-    # Use psycopg async driver with proper SSL for Render PostgreSQL
+    # Use psycopg async driver — it handles sslmode in DSN natively
     db_url = db_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
-    # Strip any query params
+    # Strip existing query params and add sslmode=require
     if "?" in db_url:
         db_url = db_url.split("?")[0]
-    # Create permissive SSL context (Render uses self-signed certs)
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-    connect_args = {"sslmode": "require", "ssl_context": ssl_ctx}
+    db_url += "?sslmode=require"
 
 engine = create_async_engine(db_url, echo=False, connect_args=connect_args)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
