@@ -130,13 +130,13 @@ async def check_label(
                 check["found_text"] = sgr_number
                 break
 
-    # Step 5: Smart not_applicable logic for conditional checks
-    # These checks have required_if conditions — if AI marked them as fail/warning
-    # and there's no evidence they're needed, mark as not_applicable
+    # Step 5: Text-based fallback for checks AI missed
+    _text_fallback_checks(checks, extracted_text)
+
+    # Step 6: Smart not_applicable logic for conditional checks
     CONDITIONAL_CHECK_IDS = {"importer", "nutritional_value", "allergens", "gmo_info"}
     for check in checks:
         cid = check["id"]
-        # Non-required checks that AI couldn't verify → not_applicable
         if not check["required"] and check["status"] in ("warning", "fail"):
             if cid in CONDITIONAL_CHECK_IDS:
                 check["status"] = "not_applicable"
@@ -148,19 +148,15 @@ async def check_label(
                     check["details"] = "Не применимо (типичные аллергены не обнаружены в составе)"
                 elif cid == "gmo_info":
                     check["details"] = "Не применимо (БАД не содержит ГМО)"
-            elif "Не проверено" in check.get("details", ""):
-                check["status"] = "not_applicable"
-                check["details"] = "Не применимо"
 
-    # Step 6: Registry checks — mark as not_applicable when no registry data
-    # (will be overridden by label.py if SGR found in DB)
+    # Step 7: Registry checks — mark as not_applicable when no registry data
     for check in checks:
         if check.get("category") == "registry" and check["status"] in ("warning", "fail"):
             if "Не проверено" in check.get("details", "") or check["details"] == "":
                 check["status"] = "not_applicable"
                 check["details"] = "Данные СГР не загружены — сверка с реестром не выполнена"
 
-    # Step 5: Compute score
+    # Step 8: Compute score
     score, overall_status = compute_score(checks)
 
     return {
@@ -176,6 +172,64 @@ async def check_label(
         "therapeutic_claims": ai_result.get("therapeutic_claims", []),
         "pictograms": ai_result.get("pictograms", {}),
     }
+
+
+def _text_fallback_checks(checks: list[dict], text: str) -> None:
+    """Apply text-based fallback for checks the AI missed (status='warning' + 'Не проверено AI')."""
+    if not text:
+        return
+    text_lower = text.lower()
+
+    # Patterns to search in extracted text for each check id
+    FALLBACK_PATTERNS = {
+        "net_weight": [
+            r'\d+\s*(?:капсул|таблеток|таблетки|штук|шт\.?)',
+            r'масса\s+нетто',
+            r'\d+\s*(?:г|кг|мг|мл|л)\b',
+        ],
+        "mfg_date": [
+            r'дата\s+(?:из|производ)',
+            r'дат[аы]\s+изготовлен',
+            r'(?:изготовлен|произведен|дата).{0,30}(?:указан|нанесен|см\.)',
+            r'дат[аы].{0,20}(?:на дне|на упаковке|на банке|на крышке)',
+        ],
+        "no_eco_clean": [],  # If AI didn't flag → pass (no violation)
+        "no_misleading": [],  # If AI didn't flag → pass (no violation)
+    }
+
+    for check in checks:
+        if check["status"] != "warning" or "Не проверено" not in check.get("details", ""):
+            continue
+        cid = check["id"]
+
+        # For "prohibited" category: if AI didn't flag a violation, it's pass
+        if check.get("category") == "prohibited":
+            check["status"] = "pass"
+            check["details"] = "Нарушений не обнаружено"
+            continue
+
+        patterns = FALLBACK_PATTERNS.get(cid)
+        if patterns is None:
+            continue
+
+        # Empty patterns = auto-pass (for prohibited checks)
+        if not patterns:
+            check["status"] = "pass"
+            check["details"] = "Нарушений не обнаружено"
+            continue
+
+        for pattern in patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                found = text[match.start():match.end() + 30].strip()
+                # Get a wider context for found_text
+                ctx_start = max(0, match.start() - 10)
+                ctx_end = min(len(text), match.end() + 40)
+                found_text = text[ctx_start:ctx_end].strip()
+                check["status"] = "pass"
+                check["details"] = "Найдено в тексте этикетки"
+                check["found_text"] = found_text
+                break
 
 
 def _merge_checks(
@@ -323,12 +377,36 @@ def _check_registry(
                 )
 
     elif check_id == "composition_match":
+        # First try AI check
         ai_comp = next(
             (c for c in ai_result.get("checks", []) if c.get("id") == "composition_match"),
             None,
         )
-        if ai_comp:
+        if ai_comp and ai_comp.get("status") not in ("warning", None):
             check["status"] = ai_comp.get("status", "warning")
             check["details"] = ai_comp.get("details", "Проверено AI")
+        else:
+            # Fallback: compare composition words from SGR label text vs extracted label text
+            reg_label = reg.get("DOC_LABEL", "") or reg.get("SOSTAV", "") or ""
+            label_text = ai_result.get("extracted_text", "")
+            if reg_label and label_text:
+                # Extract significant words (4+ chars) for comparison
+                reg_words = set(re.findall(r'[а-яёa-z]{4,}', reg_label.lower()))
+                label_words = set(re.findall(r'[а-яёa-z]{4,}', label_text.lower()))
+                if reg_words:
+                    overlap = reg_words & label_words
+                    ratio = len(overlap) / len(reg_words)
+                    if ratio >= 0.4:
+                        check["status"] = "pass"
+                        check["details"] = f"Состав соответствует данным СГР (совпадение {ratio:.0%})"
+                    else:
+                        check["status"] = "warning"
+                        check["details"] = f"Низкое совпадение состава с СГР ({ratio:.0%})"
+                else:
+                    check["status"] = "warning"
+                    check["details"] = "В СГР не указан состав для сравнения"
+            elif not reg_label:
+                check["status"] = "warning"
+                check["details"] = "В данных СГР не найден состав для сверки"
 
     return check

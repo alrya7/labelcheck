@@ -40,6 +40,8 @@ def _sgr_to_dict(record: SgrRecord) -> dict:
             "FIRMGET_ADDR": record.firmget_addr,
             "FIRMMADE_NAME": record.firmmade_name,
             "DOC_NORM": record.doc_norm,
+            "DOC_LABEL": getattr(record, "doc_label", None) or "",
+            "DOC_USEAREA": getattr(record, "doc_usearea", None) or "",
         }
     }
 
