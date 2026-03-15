@@ -72,15 +72,72 @@ async def health():
 
 @app.get("/debug/db")
 async def debug_db():
-    from sqlalchemy import text
-    from app.database import async_session
+    """Test DB connection with raw asyncpg to diagnose SSL issues."""
+    import asyncpg
+    import ssl as ssl_mod
+    from app.config import settings
+
+    results = {}
+    db_url = settings.database_url
+    # Convert SQLAlchemy URL to plain postgres URL
+    raw_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+    if "?" in raw_url:
+        raw_url = raw_url.split("?")[0]
+
+    results["url_host"] = raw_url.split("@")[1].split("/")[0] if "@" in raw_url else "unknown"
+
+    # Test 1: no SSL
     try:
-        async with async_session() as session:
-            result = await session.execute(text("SELECT count(*) FROM verification_reports"))
-            count = result.scalar()
-            cols = await session.execute(text(
-                "SELECT column_name FROM information_schema.columns WHERE table_name='verification_reports' ORDER BY ordinal_position"
-            ))
-            return {"count": count, "columns": [r[0] for r in cols.fetchall()]}
+        conn = await asyncpg.connect(raw_url, timeout=10)
+        count = await conn.fetchval("SELECT count(*) FROM verification_reports")
+        await conn.close()
+        results["no_ssl"] = f"OK, count={count}"
     except Exception as e:
-        return {"error": str(e), "trace": traceback.format_exc()[-500:]}
+        results["no_ssl"] = str(e)
+
+    # Test 2: ssl=True
+    try:
+        conn = await asyncpg.connect(raw_url, ssl=True, timeout=10)
+        count = await conn.fetchval("SELECT count(*) FROM verification_reports")
+        await conn.close()
+        results["ssl_true"] = f"OK, count={count}"
+    except Exception as e:
+        results["ssl_true"] = str(e)
+
+    # Test 3: custom SSLContext CERT_NONE
+    try:
+        ctx = ssl_mod.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl_mod.CERT_NONE
+        conn = await asyncpg.connect(raw_url, ssl=ctx, timeout=10)
+        count = await conn.fetchval("SELECT count(*) FROM verification_reports")
+        await conn.close()
+        results["ssl_ctx_none"] = f"OK, count={count}"
+    except Exception as e:
+        results["ssl_ctx_none"] = str(e)
+
+    # Test 4: SSLContext PROTOCOL_TLS
+    try:
+        ctx2 = ssl_mod.SSLContext(ssl_mod.PROTOCOL_TLS_CLIENT)
+        ctx2.check_hostname = False
+        ctx2.verify_mode = ssl_mod.CERT_NONE
+        conn = await asyncpg.connect(raw_url, ssl=ctx2, timeout=10)
+        count = await conn.fetchval("SELECT count(*) FROM verification_reports")
+        await conn.close()
+        results["ssl_tls_client"] = f"OK, count={count}"
+    except Exception as e:
+        results["ssl_tls_client"] = str(e)
+
+    # Test 5: direct_tls
+    try:
+        ctx3 = ssl_mod.create_default_context()
+        ctx3.check_hostname = False
+        ctx3.verify_mode = ssl_mod.CERT_NONE
+        conn = await asyncpg.connect(raw_url, ssl=ctx3, direct_tls=True, timeout=10)
+        count = await conn.fetchval("SELECT count(*) FROM verification_reports")
+        await conn.close()
+        results["direct_tls"] = f"OK, count={count}"
+    except Exception as e:
+        results["direct_tls"] = str(e)
+
+    return results
