@@ -131,7 +131,7 @@ async def check_label(
         "ai_analysis": json.dumps(ai_result, ensure_ascii=False),
         "extracted_label_text": extracted_text,
         "sgr_number": sgr_number,
-        "registry_data": registry_data,
+        "registry_data": None,
         "product_name": ai_result.get("product_name"),
         "spelling_errors": ai_result.get("spelling_errors", []),
         "therapeutic_claims": ai_result.get("therapeutic_claims", []),
