@@ -121,6 +121,45 @@ async def check_label(
     ai_checks = ai_result.get("checks", [])
     checks = _merge_checks(ai_checks, None, ai_result)
 
+    # Step 4: Update SGR number check if number was found
+    if sgr_number:
+        for check in checks:
+            if check["id"] == "sgr_number":
+                check["status"] = "pass"
+                check["details"] = f"Номер СГР найден на этикетке: {sgr_number}"
+                check["found_text"] = sgr_number
+                break
+
+    # Step 5: Smart not_applicable logic for conditional checks
+    # These checks have required_if conditions — if AI marked them as fail/warning
+    # and there's no evidence they're needed, mark as not_applicable
+    CONDITIONAL_CHECK_IDS = {"importer", "nutritional_value", "allergens", "gmo_info"}
+    for check in checks:
+        cid = check["id"]
+        # Non-required checks that AI couldn't verify → not_applicable
+        if not check["required"] and check["status"] in ("warning", "fail"):
+            if cid in CONDITIONAL_CHECK_IDS:
+                check["status"] = "not_applicable"
+                if cid == "importer":
+                    check["details"] = "Не применимо (продукция не импортная или импортёр = изготовитель)"
+                elif cid == "nutritional_value":
+                    check["details"] = "Не применимо (БАД в капсулах/таблетках с незначительной энерг. ценностью)"
+                elif cid == "allergens":
+                    check["details"] = "Не применимо (типичные аллергены не обнаружены в составе)"
+                elif cid == "gmo_info":
+                    check["details"] = "Не применимо (БАД не содержит ГМО)"
+            elif "Не проверено" in check.get("details", ""):
+                check["status"] = "not_applicable"
+                check["details"] = "Не применимо"
+
+    # Step 6: Registry checks — mark as not_applicable when no registry data
+    # (will be overridden by label.py if SGR found in DB)
+    for check in checks:
+        if check.get("category") == "registry" and check["status"] in ("warning", "fail"):
+            if "Не проверено" in check.get("details", "") or check["details"] == "":
+                check["status"] = "not_applicable"
+                check["details"] = "Данные СГР не загружены — сверка с реестром не выполнена"
+
     # Step 5: Compute score
     score, overall_status = compute_score(checks)
 

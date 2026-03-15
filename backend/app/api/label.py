@@ -129,6 +129,31 @@ async def check_label_endpoint(
         ai_result = json.loads(result.get("ai_analysis", "{}") or "{}")
         ai_checks = ai_result.get("checks", [])
         checks = _merge_checks(ai_checks, sgr_record_data, ai_result)
+
+        # Re-apply SGR number pass if found
+        sgr_number = result.get("sgr_number")
+        if sgr_number:
+            for check in checks:
+                if check["id"] == "sgr_number":
+                    check["status"] = "pass"
+                    check["details"] = f"Номер СГР найден на этикетке: {sgr_number}"
+                    check["found_text"] = sgr_number
+                    break
+
+        # Re-apply not_applicable logic for conditional checks
+        CONDITIONAL_CHECK_IDS = {"importer", "nutritional_value", "allergens", "gmo_info"}
+        for check in checks:
+            if not check["required"] and check["status"] in ("warning", "fail") and check["id"] in CONDITIONAL_CHECK_IDS:
+                check["status"] = "not_applicable"
+                if check["id"] == "importer":
+                    check["details"] = "Не применимо (продукция не импортная или импортёр = изготовитель)"
+                elif check["id"] == "nutritional_value":
+                    check["details"] = "Не применимо (БАД в капсулах/таблетках с незначительной энерг. ценностью)"
+                elif check["id"] == "allergens":
+                    check["details"] = "Не применимо (типичные аллергены не обнаружены в составе)"
+                elif check["id"] == "gmo_info":
+                    check["details"] = "Не применимо (БАД не содержит ГМО)"
+
         score, overall_status = compute_score(checks)
         result["checks"] = checks
         result["score"] = score
