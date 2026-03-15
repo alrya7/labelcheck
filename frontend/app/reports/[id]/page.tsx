@@ -39,8 +39,8 @@ export default function ReportDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const labelImageUrl = report?.label_file_url
-    ? `${BACKEND_ORIGIN}${report.label_file_url}`
+  const labelImageUrl = report?.id
+    ? `${API_BASE}/reports/${report.id}/image`
     : null;
 
   return (

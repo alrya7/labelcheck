@@ -8,7 +8,7 @@ import LabelImageViewer from "@/components/LabelImageViewer";
 import { checkLabel, uploadSgr } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://labelcheck-api.onrender.com/api/v1";
-const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1\/?$/, "");
+const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
 
 type Tab = "check" | "sgr";
 
@@ -136,7 +136,7 @@ export default function Home() {
                   <div className="space-y-6">
                     {report.label_file_url && (
                       <LabelImageViewer
-                        src={`${BACKEND_ORIGIN}${report.label_file_url}`}
+                        src={`${API_BASE}/reports/${report.id}/image`}
                       />
                     )}
 
