@@ -8,13 +8,6 @@ db_url = settings.database_url
 
 if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
-elif "asyncpg" in db_url:
-    # Use psycopg async driver — it handles sslmode in DSN natively
-    db_url = db_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
-    # Strip existing query params and add sslmode=require
-    if "?" in db_url:
-        db_url = db_url.split("?")[0]
-    db_url += "?sslmode=require"
 
 engine = create_async_engine(db_url, echo=False, connect_args=connect_args)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
