@@ -32,15 +32,67 @@ def _parse_json_response(raw: str) -> dict:
 
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning("First JSON parse failed at pos %d: %s", e.pos, e.msg)
+        # Try extracting JSON block
         match = re.search(r'\{[\s\S]*\}', text)
         if match:
             try:
                 return json.loads(match.group())
             except json.JSONDecodeError:
                 pass
-        logger.warning("Failed to parse JSON from OpenAI response, returning raw text")
+        # Try fixing common issues: unescaped quotes in string values
+        try:
+            fixed = _fix_json_string(text)
+            return json.loads(fixed)
+        except (json.JSONDecodeError, Exception) as e2:
+            logger.warning("JSON repair also failed: %s", e2)
+        logger.error("Failed to parse JSON from OpenAI response, returning raw text")
         return {"raw_response": text, "checks": [], "extracted_text": text}
+
+
+def _fix_json_string(text: str) -> str:
+    """Attempt to fix JSON with unescaped quotes inside string values."""
+    # Strategy: find string values and escape internal quotes
+    result = []
+    i = 0
+    in_string = False
+    string_start = -1
+
+    while i < len(text):
+        ch = text[i]
+        if ch == '\\' and in_string:
+            result.append(ch)
+            i += 1
+            if i < len(text):
+                result.append(text[i])
+            i += 1
+            continue
+        if ch == '"':
+            if not in_string:
+                in_string = True
+                string_start = i
+                result.append(ch)
+            else:
+                # Check if this quote ends the string or is internal
+                # Look ahead: after closing quote should be , or } or ] or : or whitespace
+                rest = text[i + 1:].lstrip()
+                if rest and rest[0] in ',:}]':
+                    in_string = False
+                    result.append(ch)
+                elif not rest:
+                    in_string = False
+                    result.append(ch)
+                else:
+                    # Likely an unescaped internal quote
+                    result.append('\\"')
+                    i += 1
+                    continue
+        else:
+            result.append(ch)
+        i += 1
+
+    return ''.join(result)
 
 
 async def analyze_image(image_bytes: bytes, prompt: str, mime_type: str = "image/png") -> str:
@@ -65,6 +117,7 @@ async def analyze_image(image_bytes: bytes, prompt: str, mime_type: str = "image
             }
         ],
         max_tokens=16384,
+        response_format={"type": "json_object"},
     )
 
     return response.choices[0].message.content
@@ -88,6 +141,7 @@ async def analyze_multi_image(images: list[bytes], prompt: str) -> str:
         model=MODEL,
         messages=[{"role": "user", "content": content}],
         max_tokens=16384,
+        response_format={"type": "json_object"},
     )
 
     return response.choices[0].message.content
