@@ -7,7 +7,7 @@ import VerificationReport from "@/components/VerificationReport";
 import LabelImageViewer from "@/components/LabelImageViewer";
 import { checkLabel, uploadSgr } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://labelcheck-api.onrender.com/api/v1";
 const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1\/?$/, "");
 
 type Tab = "check" | "sgr";
@@ -30,7 +30,7 @@ export default function Home() {
       if (e.name === "AbortError") {
         setError("Превышено время ожидания (5 мин). Попробуйте загрузить изображение вместо PDF или PDF с меньшим числом страниц.");
       } else if (e.message === "Failed to fetch") {
-        setError("Не удалось подключиться к серверу. Убедитесь что бэкенд запущен на localhost:8000");
+        setError("Не удалось подключиться к серверу. Попробуйте позже.");
       } else {
         setError(e.message);
       }

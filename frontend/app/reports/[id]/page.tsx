@@ -7,7 +7,7 @@ import { getReport } from "@/lib/api";
 import VerificationReport from "@/components/VerificationReport";
 import LabelImageViewer from "@/components/LabelImageViewer";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://labelcheck-api.onrender.com/api/v1";
 const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v1\/?$/, "");
 
 interface ReportDetail {
